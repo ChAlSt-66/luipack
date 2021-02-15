@@ -44,7 +44,7 @@ type
     class function GetSelectSQL: String; virtual;
     function InsertRecord(Query: TSQLQuery): String; virtual;
     procedure Loaded(Tag: PtrInt); override;
-    procedure PrepareParams(Params: TParams; ARequest: TRequest);
+    procedure PrepareParams(Params: TParams; MethodType: THTTPMethodType; ARequest: TRequest); virtual;
     procedure PrepareQuery(Query: TSQLQuery; MethodType: THTTPMethodType;
       const ASelectSQL, AConditionsSQL: String); virtual;
     procedure PrepareResponse(ResponseData: TJSONData); virtual;
@@ -118,7 +118,7 @@ procedure QueryFieldsToParams(QueryFields: TStrings; QueryParamsData: TJSONArray
 implementation
 
 uses
-  LuiJSONUtils, fpjsonrtti, dbconst;
+  LuiJSONUtils, LuiJSONHelpers, fpjsonrtti, dbconst;
 
 type
   TSQLConnectionAccess = class(TSQLConnection)
@@ -298,7 +298,7 @@ begin
     end;
     //check for exclusions
     if (FInputFieldsData <> nil) and (FInputFieldsData.JSONType = jtObject) and
-      FindJSONProp(TJSONObject(FInputFieldsData), 'exclude', ExcludeFieldsData) then
+      TJSONObject(FInputFieldsData).Find('exclude', ExcludeFieldsData) then
     begin
       for i := 0 to ExcludeFieldsData.Count - 1 do
       begin
@@ -572,9 +572,9 @@ begin
   end;
 end;
 
-procedure TSqldbResource.PrepareParams(Params: TParams; ARequest: TRequest);
+procedure TSqldbResource.PrepareParams(Params: TParams; MethodType: THTTPMethodType;
+  ARequest: TRequest);
 begin
-  Params.Clear;
   if FQueryParamsData <> nil then
     QueryFieldsToParams(ARequest.QueryFields, FQueryParamsData, Params);
   JSONDataToParams(URIParams, Params);
@@ -636,7 +636,7 @@ begin
   try
     Query.DataBase := FConnection;
     PrepareQuery(Query, hmtGet, FSelectSQL, FConditionsSQL);
-    PrepareParams(Query.Params, ARequest);
+    PrepareParams(Query.Params, hmtGet, ARequest);
     try
       Query.Open;
     except
@@ -709,7 +709,7 @@ begin
   try
     Query.DataBase := FConnection;
     PrepareQuery(Query, hmtDelete, FSelectSQL, FConditionsSQL);
-    PrepareParams(Query.Params, ARequest);
+    PrepareParams(Query.Params, hmtDelete, ARequest);
     try
       Query.Open;
     except
@@ -766,7 +766,7 @@ begin
   try
     Query.DataBase := FConnection;
     PrepareQuery(Query, hmtPost, FSelectSQL, 'where 1 <> 1');
-    PrepareParams(Query.Params, ARequest);
+    PrepareParams(Query.Params, hmtPost, ARequest);
     if TryStrToJSON(ARequest.Content, RequestData) then
     begin
       try
@@ -828,7 +828,7 @@ begin
   try
     Query.DataBase := FConnection;
     PrepareQuery(Query, hmtPut, FSelectSQL, FConditionsSQL);
-    PrepareParams(Query.Params, ARequest);
+    PrepareParams(Query.Params, hmtPut, ARequest);
     Query.Open;
     if TryStrToJSON(ARequest.Content, RequestData) then
     try
@@ -887,6 +887,8 @@ begin
     ItemResource.PrimaryKeyParam := GetItemParam;
   if ItemResource.InputFields = '' then
     ItemResource.InputFields := InputFields;
+  if ItemResource.OutputFields = '' then
+    ItemResource.OutputFields := OutputFields;
   if ItemResource.JSONFields = '' then
     ItemResource.JSONFields := JSONFields;
   ItemResource.IgnoreNotFound := IgnoreNotFound;
